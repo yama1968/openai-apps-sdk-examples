@@ -83,6 +83,7 @@ const iconMatchers = [
 
 function App() {
   const toolOutput = useOpenAiGlobal("toolOutput");
+  const toolResponseMetadata = useOpenAiGlobal("toolResponseMetadata");
   const widgetState = useOpenAiGlobal("widgetState");
   const [cartState, setCartState] = useWidgetState<CartWidgetState>(
     createDefaultCartState
@@ -163,10 +164,11 @@ function App() {
       return;
     }
 
-    // changes to cartState triggered from UI will also trigger another global update event, so we need to check if the toolOutput has actually changed.
+    // changes to cartState triggered from UI will also trigger another global update event,
+    // so we need to check if the tool event has actually changed.
     const serializedToolOutput = (() => {
       try {
-        return JSON.stringify(toolOutput);
+        return JSON.stringify({ toolOutput, toolResponseMetadata });
       } catch (error) {
         console.warn("Unable to serialize toolOutput", error);
         return "__tool_output_error__";
@@ -189,8 +191,12 @@ function App() {
     // Since we set `widgetSessionId` on the tool response, when the tool response returns
     // widgetState should contain the state from the previous turn of conversation
     // treat widgetState as the definitive local state, and add the new items
-    const baseState = widgetState ?? createDefaultCartState();
+    const baseState = widgetState ?? cartState ?? createDefaultCartState();
     const baseItems = Array.isArray(baseState.items) ? baseState.items : [];
+    const incomingCartId =
+      typeof (toolOutput as { cartId?: unknown } | null)?.cartId === "string"
+        ? ((toolOutput as { cartId?: string }).cartId ?? undefined)
+        : undefined;
 
     const itemsByName = new Map<string, CartItem>();
     for (const item of baseItems) {
@@ -206,12 +212,16 @@ function App() {
     }
 
     const nextItems = Array.from(itemsByName.values());
-    const nextState = { ...baseState, items: nextItems };
+    const nextState = {
+      ...baseState,
+      cartId: baseState.cartId ?? incomingCartId,
+      items: nextItems,
+    };
 
     // Update cartState with the new state that includes the new items
     // Updating cartState automatically updates window.openai.widgetState.
     setCartState(nextState);
-  }, [toolOutput]);
+  }, [toolOutput, toolResponseMetadata]);
 
   function getIconForItem(name: string) {
     const words = name

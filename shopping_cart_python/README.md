@@ -45,3 +45,17 @@ This demo leans on `window.openai.widgetState` to illustrate the mechanics. In p
 - Continue setting `_meta["widgetSessionId"]` so the host and widget stay locked to the same cart across turns, while the datastore ensures durability and multi-device correctness.
 
 A lightweight in-memory store works for local testing; swap in a persistent datastore when you move beyond the demo.
+
+## Example demo flow
+
+- Ask "Add 2 eggs to my cart" => you will be prompted to add the eggs to the cart, and this will be the initial cart state
+- Say "Now add milk" => the milk will be added to the existing cart
+- Add 2 avocados from the UI => the widget state will change
+- Say "Now add 3 tomatoes" => the tomatoes will be added to the existing cart
+
+You should have the following cart state:
+
+- N eggs
+- 1 milk
+- 2 avocados
+- 3 tomatoes
