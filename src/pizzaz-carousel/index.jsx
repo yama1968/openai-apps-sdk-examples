@@ -5,7 +5,6 @@ import useEmblaCarousel from "embla-carousel-react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import markers from "../pizzaz/markers.json";
 import PlaceCard from "./PlaceCard";
-import { StrictMode } from "react";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
 
 function App() {
@@ -119,8 +118,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("pizzaz-carousel-root")).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+createRoot(document.getElementById("pizzaz-carousel-root")).render(<App />);
