@@ -1,9 +1,6 @@
 //! Routing module for the shopping cart application
 
-pub mod cart;
-pub mod mcp;
-
-use crate::model::SharedState;
+use crate::cart::state::SharedState;
 use axum::{body::Body, extract::Request, middleware::Next, Router};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -27,8 +24,8 @@ pub fn create_app_router(state: SharedState) -> Router {
 
     // Routes
     Router::new()
-        .merge(mcp::routes())
-        .merge(cart::routes())
+        .merge(crate::mcp::routes())
+        .merge(crate::cart::routes())
         .layer(log_layer)
         .layer(cors_layer)
         .with_state(state)

@@ -1,11 +1,5 @@
-//! Shopping Cart Application Main Entry Point
-//! This application demonstrates a shopping cart widget integration with OpenAI
-
-mod helpers;
-mod model;
-mod router;
-
-use model::AppState;
+use shopping_cart_rust::cart::AppState;
+use shopping_cart_rust::router::create_app_router;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -15,7 +9,7 @@ async fn main() {
     let state = Arc::new(AppState::new());
 
     // Build application router with all routes and middleware
-    let app = router::create_app_router(state);
+    let app = create_app_router(state);
 
     // Configure the server address
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
@@ -28,8 +22,11 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{AppState, CartItem, TOOL_NAME};
     use serde_json::json;
+    use shopping_cart_rust::cart::models::CartItem;
+    use shopping_cart_rust::cart::state::AppState;
+    use shopping_cart_rust::mcp::handlers::handle_tool_call;
+    use shopping_cart_rust::mcp::models::TOOL_NAME;
     use std::collections::HashMap;
 
     #[tokio::test]
@@ -55,7 +52,6 @@ mod tests {
         });
 
         // Use the handler from the public MCP module
-        use crate::router::mcp::handle_tool_call;
         handle_tool_call(&state, TOOL_NAME, args).expect("Tool call failed");
 
         // 3. Verify
@@ -73,11 +69,12 @@ mod tests {
 
     #[test]
     fn test_rpc_envelopes() {
-        let success = crate::model::rpc_success(json!(1), json!("ok"));
+        use shopping_cart_rust::mcp::helpers::{rpc_error, rpc_success};
+        let success = rpc_success(json!(1), json!("ok"));
         assert_eq!(success["result"], "ok");
         assert_eq!(success["id"], 1);
 
-        let error = crate::model::rpc_error(json!(2), -1, "fail");
+        let error = rpc_error(json!(2), -1, "fail");
         assert_eq!(error["error"]["message"], "fail");
         assert_eq!(error["id"], 2);
     }

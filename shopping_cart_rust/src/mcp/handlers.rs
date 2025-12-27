@@ -3,16 +3,13 @@
 //! This module implements the Model Context Protocol handlers for the shopping cart application.
 //! It exports `handle_tool_call` publicly to make it accessible for tests.
 
-use crate::model::{
-    format_item_summary, get_or_create_cart_id, rpc_error, rpc_success, update_cart_with_new_items,
-    widget_meta, AddToCartInput, AppState, CheckoutInput, JsonRpcRequest, CHECKOUT_TOOL_NAME,
-    PROTOCOL_VERSION, SERVER_NAME, TOOL_NAME, WIDGET_MIME_TYPE, WIDGET_TEMPLATE_URI,
-};
+use super::{helpers::*, models::*};
+use crate::cart::{helpers::*, models::*, state::*};
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use serde_json::{json, Value};
 
 /// Creates routes for MCP-related operations
-pub fn routes() -> Router<crate::model::SharedState> {
+pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/", post(handle_mcp).get(handle_mcp_sse))
         .route("/mcp", post(handle_mcp).get(handle_mcp_sse)) // Standard endpoint
@@ -30,7 +27,7 @@ async fn handle_mcp_sse() -> impl IntoResponse {
 /// Endpoint: POST /mcp
 /// Handles the Model Context Protocol communication for POST requests.
 async fn handle_mcp(
-    State(state): State<crate::model::SharedState>,
+    State(state): State<SharedState>,
     body: Result<Json<JsonRpcRequest>, axum::extract::rejection::JsonRejection>,
 ) -> impl IntoResponse {
     // Parse JSON-RPC Request (POST)
@@ -125,7 +122,7 @@ fn handle_tools_list() -> Value {
                     "required": ["items"],
                     "additionalProperties": false
                 },
-                "_meta": widget_meta()
+                "_meta": widget_meta(None)
             },
             {
                 "name": CHECKOUT_TOOL_NAME,
@@ -138,10 +135,10 @@ fn handle_tools_list() -> Value {
                     },
                     "additionalProperties": false
                 },
-                "_meta": widget_meta()
+                "_meta": widget_meta(None)
             }
         ],
-        "_meta": widget_meta()
+        "_meta": widget_meta(None)
     })
 }
 
@@ -152,9 +149,9 @@ fn handle_resources_list() -> Value {
             "name": "Start shopping cart",
             "uri": WIDGET_TEMPLATE_URI,
             "mimeType": WIDGET_MIME_TYPE,
-            "_meta": widget_meta()
+            "_meta": widget_meta(None)
         }],
-        "_meta": widget_meta()
+        "_meta": widget_meta(None)
     })
 }
 
@@ -166,9 +163,9 @@ async fn handle_resources_read(state: &AppState) -> Value {
             "uri": WIDGET_TEMPLATE_URI,
             "mimeType": WIDGET_MIME_TYPE,
             "text": html,
-            "_meta": widget_meta()
+            "_meta": widget_meta(None)
         }],
-        "_meta": widget_meta()
+        "_meta": widget_meta(None)
     })
 }
 
@@ -189,7 +186,7 @@ fn handle_add_to_cart_tool(state: &AppState, args: Value) -> Result<Value, Strin
     let cart_id = get_or_create_cart_id(input.cart_id);
 
     // Update or initialize cart
-    let mut cart_items = state.carts.entry(cart_id.clone()).or_insert(Vec::new());
+    let mut cart_items = state.carts.entry(cart_id.clone()).or_default();
 
     // Update cart contents
     update_cart_with_new_items(&mut cart_items, input.items);
@@ -203,7 +200,7 @@ fn handle_add_to_cart_tool(state: &AppState, args: Value) -> Result<Value, Strin
             "cartId": cart_id,
             "items": current_items
         },
-        "_meta": widget_meta()
+        "_meta": widget_meta(Some(&cart_id))
     }))
 }
 
@@ -227,7 +224,7 @@ fn handle_checkout_tool(state: &AppState, args: Value) -> Result<Value, String> 
                 "items": [],
                 "checkout": true
             },
-            "_meta": widget_meta()
+            "_meta": widget_meta(Some(&cart_id))
         }))
     } else {
         // Handle empty cart case
@@ -238,7 +235,7 @@ fn handle_checkout_tool(state: &AppState, args: Value) -> Result<Value, String> 
                 "items": [],
                 "checkout": true
             },
-            "_meta": widget_meta()
+            "_meta": widget_meta(Some(&cart_id))
         }))
     }
 }

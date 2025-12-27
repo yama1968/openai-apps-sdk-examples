@@ -1,9 +1,9 @@
-//! Cart-related route handlers
+//! REST API handlers for shopping cart operations
+//!
+//! This module implements HTTP endpoints for cart synchronization
+//! and checkout operations.
 
-use crate::model::{
-    format_item_summary, get_or_create_cart_id, AddToCartInput, CheckoutInput, SharedState,
-    SyncResponse,
-};
+use super::{helpers::*, models::*, state::SharedState};
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 
 /// Creates routes for cart-related operations
