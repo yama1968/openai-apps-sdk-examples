@@ -50,6 +50,12 @@ pub struct AddToCartInput {
     pub cart_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CheckoutInput {
+    #[serde(rename = "cartId")]
+    pub cart_id: Option<String>,
+}
+
 #[derive(Serialize)]
 struct SyncResponse {
     status: String,
@@ -275,10 +281,12 @@ async fn handle_resources_read(state: &AppState) -> Value {
 /// Handles `tools/call` request (Business Logic).
 fn handle_tool_call(state: &AppState, name: &str, args: Value) -> Result<Value, String> {
     if name == TOOL_NAME {
-        let input: AddToCartInput = serde_json::from_value(args)
-            .map_err(|e| format!("Invalid arguments: {}", e))?;
+        let input: AddToCartInput =
+            serde_json::from_value(args).map_err(|e| format!("Invalid arguments: {}", e))?;
 
-        let cart_id = input.cart_id.unwrap_or_else(|| Uuid::new_v4().simple().to_string());
+        let cart_id = input
+            .cart_id
+            .unwrap_or_else(|| Uuid::new_v4().simple().to_string());
 
         // Logic: Aggregate quantities if item exists, otherwise append
         let mut cart_items = state.carts.entry(cart_id.clone()).or_insert(Vec::new());
@@ -304,15 +312,12 @@ fn handle_tool_call(state: &AppState, name: &str, args: Value) -> Result<Value, 
             "_meta": widget_meta()
         }))
     } else if name == CHECKOUT_TOOL_NAME {
-        #[derive(Deserialize)]
-        struct CheckoutInput {
-            #[serde(rename = "cartId")]
-            cart_id: Option<String>,
-        }
-        let input: CheckoutInput = serde_json::from_value(args)
-            .map_err(|e| format!("Invalid arguments: {}", e))?;
+        let input: CheckoutInput =
+            serde_json::from_value(args).map_err(|e| format!("Invalid arguments: {}", e))?;
 
-        let cart_id = input.cart_id.unwrap_or_else(|| Uuid::new_v4().simple().to_string());
+        let cart_id = input
+            .cart_id
+            .unwrap_or_else(|| Uuid::new_v4().simple().to_string());
 
         // Remove the cart from the state to clear it
         if let Some((_, items)) = state.carts.remove(&cart_id) {
@@ -368,6 +373,29 @@ async fn sync_cart(
 
     Json(SyncResponse {
         status: "updated".to_string(),
+        cart_id,
+    })
+}
+
+async fn checkout(
+    State(state): State<SharedState>,
+    Json(payload): Json<CheckoutInput>,
+) -> impl IntoResponse {
+    let cart_id = payload
+        .cart_id
+        .unwrap_or_else(|| Uuid::new_v4().simple().to_string());
+
+    if let Some((_, items)) = state.carts.remove(&cart_id) {
+        let item_summary = items
+            .iter()
+            .map(|i| format!("{}x {}", i.quantity, i.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        println!("REST API CHECKOUT: Cart {} - {}", cart_id, item_summary);
+    }
+
+    Json(SyncResponse {
+        status: "checked_out".to_string(),
         cart_id,
     })
 }
@@ -469,6 +497,7 @@ async fn main() {
         .route("/mcp", post(handle_mcp).get(handle_mcp)) // Standard endpoint
         .route("/mcp/", post(handle_mcp).get(handle_mcp)) // Trailing slash safety
         .route("/sync_cart", post(sync_cart).options(sync_cart))
+        .route("/checkout", post(checkout).options(checkout))
         .layer(log_layer)
         .layer(cors_layer)
         .with_state(state);
@@ -494,9 +523,11 @@ mod tests {
         let cart_id = "test_cart_1";
 
         // 1. Initial Insert (Simulate Sync)
-        let initial_items = vec![
-            CartItem { name: "Apple".into(), quantity: 2, extra: HashMap::new() }
-        ];
+        let initial_items = vec![CartItem {
+            name: "Apple".into(),
+            quantity: 2,
+            extra: HashMap::new(),
+        }];
         state.carts.insert(cart_id.into(), initial_items);
 
         // 2. Tool Call (Simulate Add)
@@ -514,7 +545,10 @@ mod tests {
         let items = state.carts.get(cart_id).unwrap();
 
         let apple = items.iter().find(|i| i.name == "Apple").unwrap();
-        assert_eq!(apple.quantity, 5, "Apple quantity should aggregate to 2+3=5");
+        assert_eq!(
+            apple.quantity, 5,
+            "Apple quantity should aggregate to 2+3=5"
+        );
 
         let banana = items.iter().find(|i| i.name == "Banana").unwrap();
         assert_eq!(banana.quantity, 1, "Banana should be added");

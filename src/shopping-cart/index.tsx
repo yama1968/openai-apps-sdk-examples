@@ -109,6 +109,29 @@ function App() {
     }
   };
 
+  const handleCheckout = async () => {
+    const cartId = cartState?.cartId;
+    if (!cartId) return;
+
+    try {
+      console.log("Checking out via REST API...");
+      const response = await fetch("http://localhost:8000/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cartId }),
+      });
+
+      if (response.ok) {
+        setCartState({
+          ...cartState,
+          items: [],
+        });
+      }
+    } catch (error) {
+      console.error("Failed to checkout:", error);
+    }
+  };
+
   function addItem(name: string) {
     if (!name) {
       return;
@@ -393,6 +416,7 @@ function App() {
             <button
               type="button"
               disabled={cartItems.length === 0}
+              onClick={handleCheckout}
               className="w-full rounded-2xl border border-black/30 bg-white py-3 text-sm font-semibold text-black/70 transition hover:border-black/50 disabled:cursor-not-allowed disabled:opacity-70"
             >
               Check out
