@@ -191,7 +191,6 @@ async def _handle_call_tool(req: types.CallToolRequest) -> types.ServerResult:
         "items": [dict(item) for item in cart_items],
     }
     meta = _widget_meta()
-    meta["openai/widgetSessionId"] = cart_id
 
     message = f"Cart {cart_id} now has {len(cart_items)} item(s)."
     return types.ServerResult(
