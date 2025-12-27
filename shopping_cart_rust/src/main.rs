@@ -19,6 +19,7 @@ use uuid::Uuid;
 // -----------------------------------------------------------------------------
 
 const TOOL_NAME: &str = "add_to_cart";
+const CHECKOUT_TOOL_NAME: &str = "checkout";
 const WIDGET_TEMPLATE_URI: &str = "ui://widget/shopping-cart.html";
 const WIDGET_MIME_TYPE: &str = "text/html+skybridge";
 const SERVER_NAME: &str = "shopping-cart-rust";
@@ -199,32 +200,47 @@ fn handle_initialize() -> Value {
 /// Handles `tools/list` request.
 fn handle_tools_list() -> Value {
     json!({
-        "tools": [{
-            "name": TOOL_NAME,
-            "title": "Add items to cart",
-            "description": "Adds the provided items to the active cart and returns its state.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "items": {
-                        "type": "array",
+        "tools": [
+            {
+                "name": TOOL_NAME,
+                "title": "Add items to cart",
+                "description": "Adds the provided items to the active cart and returns its state.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
                         "items": {
-                            "type": "object",
-                            "required": ["name"],
-                            "properties": {
-                                "name": { "type": "string" },
-                                "quantity": { "type": "integer", "default": 1 }
-                            },
-                            "additionalProperties": true
-                        }
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["name"],
+                                "properties": {
+                                    "name": { "type": "string" },
+                                    "quantity": { "type": "integer", "default": 1 }
+                                },
+                                "additionalProperties": true
+                            }
+                        },
+                        "cartId": { "type": "string" }
                     },
-                    "cartId": { "type": "string" }
+                    "required": ["items"],
+                    "additionalProperties": false
                 },
-                "required": ["items"],
-                "additionalProperties": false
+                "_meta": widget_meta()
             },
-            "_meta": widget_meta()
-        }],
+            {
+                "name": CHECKOUT_TOOL_NAME,
+                "title": "Checkout",
+                "description": "Checks out the current cart, clearing it and returning a receipt.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "cartId": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                },
+                "_meta": widget_meta()
+            }
+        ],
         "_meta": widget_meta()
     })
 }
@@ -258,38 +274,80 @@ async fn handle_resources_read(state: &AppState) -> Value {
 
 /// Handles `tools/call` request (Business Logic).
 fn handle_tool_call(state: &AppState, name: &str, args: Value) -> Result<Value, String> {
-    if name != TOOL_NAME {
-        return Err("Unknown tool".to_string());
-    }
+    if name == TOOL_NAME {
+        let input: AddToCartInput = serde_json::from_value(args)
+            .map_err(|e| format!("Invalid arguments: {}", e))?;
 
-    let input: AddToCartInput = serde_json::from_value(args)
-        .map_err(|e| format!("Invalid arguments: {}", e))?;
+        let cart_id = input.cart_id.unwrap_or_else(|| Uuid::new_v4().simple().to_string());
 
-    let cart_id = input.cart_id.unwrap_or_else(|| Uuid::new_v4().simple().to_string());
+        // Logic: Aggregate quantities if item exists, otherwise append
+        let mut cart_items = state.carts.entry(cart_id.clone()).or_insert(Vec::new());
 
-    // Logic: Aggregate quantities if item exists, otherwise append
-    let mut cart_items = state.carts.entry(cart_id.clone()).or_insert(Vec::new());
-
-    for incoming in input.items {
-        if let Some(existing) = cart_items.iter_mut().find(|i| i.name == incoming.name) {
-            existing.quantity += incoming.quantity;
-            // Merge extra fields if needed, or overwrite? Python version doesn't merge extra, it just updates qty.
-        } else {
-            cart_items.push(incoming);
+        for incoming in input.items {
+            if let Some(existing) = cart_items.iter_mut().find(|i| i.name == incoming.name) {
+                existing.quantity += incoming.quantity;
+                // Merge extra fields if needed, or overwrite? Python version doesn't merge extra, it just updates qty.
+            } else {
+                cart_items.push(incoming);
+            }
         }
+
+        let current_items = cart_items.clone();
+        let message = format!("Cart {} now has {} item(s).", cart_id, current_items.len());
+
+        Ok(json!({
+            "content": [{ "type": "text", "text": message }],
+            "structuredContent": {
+                "cartId": cart_id,
+                "items": current_items
+            },
+            "_meta": widget_meta()
+        }))
+    } else if name == CHECKOUT_TOOL_NAME {
+        #[derive(Deserialize)]
+        struct CheckoutInput {
+            #[serde(rename = "cartId")]
+            cart_id: Option<String>,
+        }
+        let input: CheckoutInput = serde_json::from_value(args)
+            .map_err(|e| format!("Invalid arguments: {}", e))?;
+
+        let cart_id = input.cart_id.unwrap_or_else(|| Uuid::new_v4().simple().to_string());
+
+        // Remove the cart from the state to clear it
+        if let Some((_, items)) = state.carts.remove(&cart_id) {
+            let item_summary = items
+                .iter()
+                .map(|i| format!("{}x {}", i.quantity, i.name))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let message = format!("Checked out now: {}", item_summary);
+            println!("BACKEND CHECKOUT: {}", message);
+
+            Ok(json!({
+                "content": [{ "type": "text", "text": message }],
+                "structuredContent": {
+                    "cartId": cart_id,
+                    "items": [],
+                    "checkout": true
+                },
+                "_meta": widget_meta()
+            }))
+        } else {
+            Ok(json!({
+                "content": [{ "type": "text", "text": "Cart is empty." }],
+                "structuredContent": {
+                    "cartId": cart_id,
+                    "items": [],
+                    "checkout": true
+                },
+                "_meta": widget_meta()
+            }))
+        }
+    } else {
+        Err(format!("Unknown tool: {}", name))
     }
-
-    let current_items = cart_items.clone();
-    let message = format!("Cart {} now has {} item(s).", cart_id, current_items.len());
-
-    Ok(json!({
-        "content": [{ "type": "text", "text": message }],
-        "structuredContent": {
-            "cartId": cart_id,
-            "items": current_items
-        },
-        "_meta": widget_meta()
-    }))
 }
 
 // -----------------------------------------------------------------------------

@@ -202,6 +202,9 @@ function App() {
       ? ((toolOutput as { items?: CartItem[] }).items ?? [])
       : [];
 
+    const isCheckout =
+      (toolOutput as { checkout?: boolean } | null)?.checkout === true;
+
     // Since we set `widgetSessionId` on the tool response, when the tool response returns
     // widgetState should contain the state from the previous turn of conversation
     // treat widgetState as the definitive local state, and add the new items
@@ -213,15 +216,21 @@ function App() {
         : undefined;
 
     const itemsByName = new Map<string, CartItem>();
-    for (const item of baseItems) {
-      if (item?.name) {
-        itemsByName.set(item.name, item);
+
+    if (!isCheckout) {
+      for (const item of baseItems) {
+        if (item?.name) {
+          itemsByName.set(item.name, item);
+        }
       }
-    }
-    // Add in the new items to create newState
-    for (const item of incomingItems) {
-      if (item?.name) {
-        itemsByName.set(item.name, { ...itemsByName.get(item.name), ...item });
+      // Add in the new items to create newState
+      for (const item of incomingItems) {
+        if (item?.name) {
+          itemsByName.set(item.name, {
+            ...itemsByName.get(item.name),
+            ...item,
+          });
+        }
       }
     }
 
