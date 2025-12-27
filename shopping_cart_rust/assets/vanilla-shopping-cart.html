@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shopping Cart</title>
+  <!-- HTMX for lightweight AJAX interactions -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <style>
+    /* Base Styles */
+    body {
+      min-height: 100vh;
+      width: 100%;
+      background: white;
+      color: black;
+      background-image:
+        radial-gradient(circle at top left, #fff7ed 0, #ffffff 55%),
+        radial-gradient(circle at bottom right, #eef2ff 0, #ffffff 45%);
+      font-family: "Trebuchet MS", "Gill Sans", "Lucida Grande", sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    /* Animation */
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Layout */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .header {
+      animation: fadeUp 0.6s ease-out both;
+      margin-bottom: 1rem;
+    }
+
+    .subtitle {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: rgba(0, 0, 0, 0.6);
+      margin-bottom: 0.5rem;
+    }
+
+    .title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      margin: 0.5rem 0;
+    }
+
+    .description {
+      font-size: 0.875rem;
+      color: rgba(0, 0, 0, 0.7);
+    }
+
+    .main-grid {
+      display: grid;
+      gap: 2rem;
+      animation: fadeUp 0.7s ease-out both;
+      animation-delay: 80ms;
+    }
+
+    @media (min-width: 992px) {
+      .main-grid {
+        grid-template-columns: 1.4fr 1fr;
+      }
+    }
+
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .counter {
+      font-size: 0.75rem;
+      color: rgba(0, 0, 0, 0.6);
+    }
+
+    /* Cards */
+    .suggested-grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    @media (min-width: 640px) {
+      .suggested-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .item-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 1rem;
+      background-color: #fffaf5;
+      border: 1px solid rgba(0, 0, 0, 0.2);
+      border-radius: 1rem;
+      animation: fadeUp 0.5s ease-out both;
+    }
+
+    .item-card:nth-child(1) { animation-delay: 120ms; }
+    .item-card:nth-child(2) { animation-delay: 200ms; }
+    .item-card:nth-child(3) { animation-delay: 280ms; }
+    .item-card:nth-child(4) { animation-delay: 360ms; }
+
+    .item-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .icon-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 3rem;
+      width: 3rem;
+      background-color: white;
+      border-radius: 0.75rem;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .cart-item .icon-wrapper {
+      height: 2.5rem;
+      width: 2.5rem;
+      border-radius: 0.5rem;
+    }
+
+    .icon {
+      height: 1.75rem;
+      width: 1.75rem;
+    }
+
+    .cart-item .icon {
+      height: 1.5rem;
+      width: 1.5rem;
+    }
+
+    .item-details {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .item-name {
+      font-size: 1rem;
+      font-weight: 600;
+      color: black;
+    }
+
+    .item-desc {
+      font-size: 0.75rem;
+      color: rgba(0, 0, 0, 0.6);
+    }
+
+    .quantity {
+      font-family: monospace;
+    }
+
+    .add-btn {
+      background-color: #fde68a;
+      color: black;
+      font-weight: 600;
+      font-size: 0.75rem;
+      padding: 0.375rem 0.75rem;
+      border-radius: 9999px;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .add-btn:hover {
+      background-color: #fcd34d;
+    }
+
+    .cart-items {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .cart-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem;
+      background-color: #fffaf5;
+      border: 1px solid rgba(0, 0, 0, 0.2);
+      border-radius: 1rem;
+    }
+
+    .empty-cart {
+      padding: 1.5rem;
+      text-align: center;
+      font-size: 0.875rem;
+      color: rgba(0, 0, 0, 0.6);
+      background-color: #fffaf5;
+      border: 1px dashed rgba(0, 0, 0, 0.4);
+      border-radius: 1rem;
+    }
+
+    .quantity-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .qty-btn {
+      height: 2rem;
+      width: 2rem;
+      border-radius: 9999px;
+      border: 1px solid rgba(0, 0, 0, 0.3);
+      background: transparent;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: rgba(0, 0, 0, 0.7);
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .qty-btn:hover {
+      background-color: white;
+    }
+
+    .checkout-btn {
+      width: 100%;
+      padding: 0.75rem;
+      background-color: white;
+      border: 1px solid rgba(0, 0, 0, 0.3);
+      border-radius: 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: rgba(0, 0, 0, 0.7);
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .checkout-btn:hover:not(:disabled) {
+      border-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .checkout-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    /* Debug section */
+    .debug-grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    @media (min-width: 992px) {
+      .debug-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .json-panel {
+      background-color: #fffaf5;
+      border: 1px solid rgba(0, 0, 0, 0.2);
+      border-radius: 1rem;
+      padding: 1rem;
+    }
+
+    .json-content {
+      max-height: 16rem;
+      overflow: auto;
+      background-color: white;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: rgba(0, 0, 0, 0.7);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <p class="subtitle">Simple cart</p>
+      <h1 class="title">Pick a few essentials</h1>
+      <p class="description">Update your cart through the chat or click to add a suggestion or adjust quantities.</p>
+    </header>
+
+    <div class="main-grid">
+      <section class="section">
+        <div class="section-header">
+          <p class="subtitle">Suggested items</p>
+        </div>
+        <div class="suggested-grid">
+          <div class="item-card" data-item-name="Eggs">
+            <div class="item-info">
+              <div class="icon-wrapper">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+                  <path fill="#F3AD61" d="M16.331 2c-2.57 0-4.98 1.28-6.42 3.4l-.13.19A21.92 21.92 0 0 0 6.101 20l.08.8c.5 5.21 4.88 9.18 10.11 9.18c5.25 0 9.63-3.99 10.11-9.22l.09-.93a21.9 21.9 0 0 0-3.78-14.48A7.77 7.77 0 0 0 16.331 2" />
+                </svg>
+              </div>
+              <div class="item-details">
+                <p class="item-name">Eggs</p>
+                <p class="item-desc">Breakfast basics</p>
+              </div>
+            </div>
+            <button class="add-btn" onclick="addItem('Eggs')">Add</button>
+          </div>
+
+          <div class="item-card" data-item-name="Bread">
+            <div class="item-info">
+              <div class="icon-wrapper">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+                  <g fill="none">
+                    <path fill="#F3AD61" d="M27.34 25.593L15 30V16.5L29 13v10.238a2.5 2.5 0 0 1-1.66 2.355" />
+                    <path fill="#E19747" d="M14.59 3.262L3.202 7.556L17 19l10.98-3.8A3 3 0 0 0 30 12.364v-.904a5 5 0 0 0-3.239-4.679l-9.35-3.52a4 4 0 0 0-2.821 0" />
+                    <path fill="#FFDEA7" d="M3 13.5v9.955a3 3 0 0 0 1.903 2.793l9.366 3.679A2 2 0 0 0 17 28.065V19l.157-.235a5.02 5.02 0 0 0-2.415-7.487L4.702 7.513A2 2 0 0 0 2 9.386v1.403a4 4 0 0 0 .672 2.219z" />
+                    <path fill="#E19747" d="M8 13.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0m-2 1a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0M7.5 17a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m-1.5.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0M9.5 16a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m2.5-1.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0m1.5 3.5a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m-1.5.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0M9.5 20a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m-1.5.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0M5.5 22a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m4.5 1.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0m1.5-.5a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m2.5-1.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0m-.5 3.5a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1" />
+                  </g>
+                </svg>
+              </div>
+              <div class="item-details">
+                <p class="item-name">Bread</p>
+                <p class="item-desc">Fresh and toasty</p>
+              </div>
+            </div>
+            <button class="add-btn" onclick="addItem('Bread')">Add</button>
+          </div>
+
+          <div class="item-card" data-item-name="Tomatoes">
+            <div class="item-info">
+              <div class="icon-wrapper">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+                  <g fill="none">
+                    <path fill="#008463" d="M15.99 5a1 1 0 0 1 1 1v4.42a1 1 0 1 1-2 0V6a1 1 0 0 1 1-1" />
+                    <path fill="#F8312F" d="M19.97 9.99H12c-5.53 0-10 4.48-10 10c0 5.53 4.48 10 10 10h7.96c5.53 0 10-4.48 10-10c.01-5.52-4.47-10-9.99-10" />
+                    <path fill="#00D26A" d="M15.4 12.66H9.64c-3.13 0-5.66-2.53-5.66-5.66h5.76c3.13 0 5.66 2.53 5.66 5.66M27.97 7h-5.76c-3.13 0-5.66 2.53-5.66 5.66h5.76c3.13 0 5.66-2.53 5.66-5.66" />
+                    <path fill="#00F397" d="M5.75 15.07h5.77a5.65 5.65 0 0 0 4.468-2.187a5.65 5.65 0 0 0 4.472 2.187h5.76c0-3.12-2.54-5.66-5.66-5.66h-9.15c-3.13 0-5.66 2.53-5.66 5.66" />
+                  </g>
+                </svg>
+              </div>
+              <div class="item-details">
+                <p class="item-name">Tomatoes</p>
+                <p class="item-desc">Juicy and bright</p>
+              </div>
+            </div>
+            <button class="add-btn" onclick="addItem('Tomatoes')">Add</button>
+          </div>
+
+          <div class="item-card" data-item-name="Avocados">
+            <div class="item-info">
+              <div class="icon-wrapper">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+                  <g fill="none">
+                    <path fill="#44911B" d="M25.58 20.33c.16-1.89-.33-3.72 1.01-5.06l.83-.83a6.06 6.06 0 0 0 0-8.56l-1.86-1.86l-1.34 1.34c-1.49.04-2.97.63-4.11 1.77l-.21.2a8.02 8.02 0 0 1-4.99 2.32c-2.5.21-4.84 1.3-6.62 3.08a10.43 10.43 0 0 0-2.42 10.98l-.68.68l2.55 2.55a10.44 10.44 0 0 0 14.77 0c1.77-1.77 2.86-4.11 3.07-6.61" />
+                    <path fill="#008463" d="M20.66 2c-1.84 0-3.58.72-4.88 2.02l-.18.19c-.95.95-2.22 1.54-3.57 1.66c-2.59.22-5.02 1.35-6.85 3.18A10.8 10.8 0 0 0 2 16.72c0 2.9 1.13 5.62 3.18 7.67s4.77 3.18 7.67 3.18s5.62-1.13 7.67-3.18c1.83-1.83 2.97-4.27 3.19-6.85a5.7 5.7 0 0 1 1.66-3.57l.19-.19a6.87 6.87 0 0 0 2.02-4.88c0-1.84-.72-3.58-2.02-4.88A6.93 6.93 0 0 0 20.66 2" />
+                    <path fill="#C3EF3C" d="m24.32 12.93l.19-.19a5.43 5.43 0 0 0 0-7.68a5.43 5.43 0 0 0-7.68 0l-.19.19a7.18 7.18 0 0 1-4.48 2.08a9.53 9.53 0 0 0-5.94 2.76a9.367 9.367 0 0 0 0 13.25a9.367 9.367 0 0 0 13.25 0a9.53 9.53 0 0 0 2.76-5.94c.15-1.68.89-3.27 2.09-4.47" />
+                    <path fill="#6D4534" d="M13.29 20.69a4.36 4.36 0 1 0 0-8.72a4.36 4.36 0 0 0 0 8.72" />
+                  </g>
+                </svg>
+              </div>
+              <div class="item-details">
+                <p class="item-name">Avocados</p>
+                <p class="item-desc">Perfectly ripe</p>
+              </div>
+            </div>
+            <button class="add-btn" onclick="addItem('Avocados')">Add</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <p class="subtitle">Cart</p>
+          <span class="counter" id="item-count">0 items</span>
+        </div>
+        <div id="cart-items" class="cart-items">
+          <div class="empty-cart">Your cart is empty. Add a few items to get started.</div>
+        </div>
+        <button id="checkout-btn" class="checkout-btn" onclick="handleCheckout()" disabled>Check out</button>
+      </section>
+    </div>
+
+    <section class="section">
+      <div class="section-header">
+        <p class="subtitle">Widget state & output</p>
+        <span class="counter">Debug view</span>
+      </div>
+      <div class="debug-grid">
+        <div class="json-panel">
+          <header></header>
+            <p class="subtitle">window.openai.widgetState</p>
+          </header>
+          <pre id="widget-state-json" class="json-content">null</pre>
+        </div>
+        <div class="json-panel">
+          <header>
+            <p class="subtitle">window.openai.toolOutput</p>
+          </header>
+          <pre id="tool-output-json" class="json-content">null</pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <template id="cart-item-template">
+    <div class="cart-item">
+      <div class="item-info">
+        <div class="icon-wrapper">
+          <svg class="icon jar-icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+            <g fill="none">
+              <path fill="#9B9B9B" d="m22 5l-6-1.141L10 5v1l6 1.394L22 6z" />
+              <path fill="#AEDDFF" d="M7.895 6C6.296 6 5 7.226 5 8.738v18.524C5 28.774 6.296 30 7.895 30h16.21C25.704 30 27 28.774 27 27.262V8.738C27 7.226 25.704 6 24.105 6z" />
+              <path fill="#BEBEBE" d="M8 3.5A1.5 1.5 0 0 1 9.5 2h13a1.5 1.5 0 0 1 0 3h-13A1.5 1.5 0 0 1 8 3.5" />
+              <rect width="2" height="20" x="22" y="8" fill="#fff" rx="1" />
+              <path fill="#9B9B9B" d="M9.999 14A1 1 0 0 0 9 15v5a1 1 0 0 0 .999 1H22a1 1 0 0 0 1-1v-5a1 1 0 0 0-.999-1z" />
+            </g>
+          </svg>
+        </div>
+        <div class="item-details">
+          <p class="item-name">Item Name</p>
+          <p class="item-desc">Qty <span class="quantity">1</span></p>
+        </div>
+      </div>
+      <div class="quantity-controls">
+        <button class="qty-btn decrease-btn">-</button>
+        <button class="qty-btn increase-btn">+</button>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    // Global state for the shopping cart
+    const shoppingCart = {
+      cartId: null,
+      items: []
+    };
+
+    // Icon matchers to select the appropriate icon for each item
+    const iconMatchers = [
+      { keywords: ["egg", "eggs"], icon: "egg-icon" },
+      { keywords: ["bread"], icon: "bread-icon" },
+      { keywords: ["tomato", "tomatoes"], icon: "tomato-icon" },
+      { keywords: ["avocado", "avocados"], icon: "avocado-icon" }
+    ];
+
+    // Initialize the widget when the page loads
+    document.addEventListener('DOMContentLoaded', () => {
+      // Set up OpenAI globals listener if it exists
+      setupOpenAiListeners();
+
+      // Initialize the cart with any existing state
+      initializeCartFromState();
+
+      // Render the initial UI
+      updateUI();
+    });
+
+    // Sets up listeners for OpenAI globals changes
+    function setupOpenAiListeners() {
+      if (typeof window.openai === 'undefined') {
+        console.warn('window.openai is not defined - widget may be running in standalone mode');
+        return;
+      }
+
+      // Custom event type for setting globals
+      const SET_GLOBALS_EVENT_TYPE = 'openai:set_globals';
+
+      // Create an event listener for changes to the globals
+      window.addEventListener(SET_GLOBALS_EVENT_TYPE, (event) => {
+        const { globals } = event.detail;
+
+        // Handle toolOutput changes
+        if (globals.toolOutput !== undefined) {
+          handleToolOutput(globals.toolOutput, globals.toolResponseMetadata);
+        }
+
+        // Handle widgetState changes
+        if (globals.widgetState !== undefined) {
+          updateStateFromWidget(globals.widgetState);
+        }
+      });
+    }
+
+    // Initialize cart state from widget state if available
+    function initializeCartFromState() {
+      if (window.openai?.widgetState) {
+        updateStateFromWidget(window.openai.widgetState);
+      }
+    }
+
+    // Track the last tool output to prevent redundant updates
+    let lastToolOutput = "__tool_output_unset__";
+
+    // Handle tool output from LLM
+    function handleToolOutput(toolOutput, metadata) {
+      if (!toolOutput) return;
+
+      // Log the received data
+      console.log('Received tool output:', toolOutput, 'with metadata:', metadata);
+
+      // Check for redundant updates
+      const serializedToolOutput = (() => {
+        try {
+          return JSON.stringify({ toolOutput, metadata });
+        } catch (error) {
+          console.warn("Unable to serialize toolOutput", error);
+          return "__tool_output_error__";
+        }
+      })();
+
+      if (serializedToolOutput === lastToolOutput) {
+        console.log("handleToolOutput skipped (toolOutput is actually unchanged)");
+        return;
+      }
+      lastToolOutput = serializedToolOutput;
+
+      // Update tool output display in the debug section
+      updateDebugDisplay();
+
+      // Check if it's a checkout operation
+      const isCheckout = toolOutput.checkout === true;
+
+      // Since widgetState should contain the state from the previous turn of conversation
+      // treat widgetState as the definitive local state, and add the new items
+      const baseState = window.openai?.widgetState || shoppingCart;
+
+      if (isCheckout) {
+        // Clear the cart for checkout
+        shoppingCart.items = [];
+      } else if (Array.isArray(toolOutput.items)) {
+        // Update cart with incoming items
+        const incomingItems = toolOutput.items;
+        const incomingCartId = typeof toolOutput.cartId === 'string' ? toolOutput.cartId : null;
+
+        // Use existing cart ID or incoming one or generate a new one
+        shoppingCart.cartId = baseState.cartId || incomingCartId || generateCartId();
+
+        // Create a map of items by name for easier merging
+        const itemsByName = new Map();
+
+        // First add existing items to the map
+        if (Array.isArray(baseState.items)) {
+          for (const item of baseState.items) {
+            if (item && item.name) {
+              itemsByName.set(item.name, item);
+            }
+          }
+        }
+
+        // Then merge in new items
+        for (const item of incomingItems) {
+          if (item && item.name) {
+            const existingItem = itemsByName.get(item.name);
+            if (existingItem) {
+              // Merge items, preserving existing properties and updating with new ones
+              itemsByName.set(item.name, { ...existingItem, ...item });
+            } else {
+              // Add new item
+              itemsByName.set(item.name, item);
+            }
+          }
+        }
+
+        // Convert map back to array
+        shoppingCart.items = Array.from(itemsByName.values());
+      }
+
+      // Update the UI
+      updateUI();
+
+      // Sync to widget state
+      syncWidgetState();
+    }
+
+    // Update state from widget state
+    function updateStateFromWidget(widgetState) {
+      if (!widgetState) return;
+
+      // Set cart ID if provided, otherwise keep the existing one
+      shoppingCart.cartId = widgetState.cartId || shoppingCart.cartId || generateCartId();
+
+      // Update items if provided
+      if (Array.isArray(widgetState.items)) {
+        // Create a deep copy of the widget state items to avoid reference issues
+        shoppingCart.items = widgetState.items.map(item => ({ ...item }));
+      } else {
+        // Initialize empty array if no items are provided
+        shoppingCart.items = [];
+      }
+
+      // Update the UI
+      updateUI();
+
+      // Update debug display
+      updateDebugDisplay();
+    }
+
+    // Add an item to the cart
+    function addItem(name) {
+      if (!name) return;
+
+      // Use widget state if available, otherwise use local cart state
+      const baseState = window.openai?.widgetState || shoppingCart;
+
+      // Ensure cart ID exists
+      const cartId = baseState.cartId || generateCartId();
+
+      // Make a deep copy of existing items to avoid reference issues
+      const items = Array.isArray(baseState.items)
+        ? baseState.items.map(item => ({ ...item }))
+        : [];
+
+      // Find existing item or add new one
+      const existingItemIndex = items.findIndex(item => item.name === name);
+
+      if (existingItemIndex === -1) {
+        // Add new item
+        items.push({ name, quantity: 1 });
+      } else {
+        // Update existing item quantity
+        const item = items[existingItemIndex];
+        items[existingItemIndex] = {
+          ...item,
+          quantity: (item.quantity || 0) + 1
+        };
+      }
+
+      // Update shopping cart with new values
+      shoppingCart.cartId = cartId;
+      shoppingCart.items = items;
+
+      // Update UI
+      updateUI();
+
+      // Sync cart with backend
+      syncToBackend(cartId, items);
+
+      // Update widget state
+      syncWidgetState();
+    }
+
+    // Adjust quantity of an item in the cart
+    function adjustQuantity(name, delta) {
+      if (!name || delta === 0) return;
+
+      // Use widget state if available, otherwise use local cart state
+      const baseState = window.openai?.widgetState || shoppingCart;
+
+      // Make a deep copy of existing items to avoid reference issues
+      const items = Array.isArray(baseState.items)
+        ? baseState.items.map(item => ({ ...item }))
+        : [];
+
+      const cartId = baseState.cartId || generateCartId();
+
+      const itemIndex = items.findIndex(item => item.name === name);
+      if (itemIndex === -1) return;
+
+      const item = items[itemIndex];
+      const newQuantity = Math.max(0, (item.quantity || 0) + delta);
+
+      if (newQuantity === 0) {
+        // Remove item if quantity becomes zero
+        items.splice(itemIndex, 1);
+      } else {
+        // Update quantity
+        items[itemIndex] = { ...item, quantity: newQuantity };
+      }
+
+      // Update shopping cart with new values
+      shoppingCart.cartId = cartId;
+      shoppingCart.items = items;
+
+      // Update UI
+      updateUI();
+
+      // Sync with backend
+      syncToBackend(cartId, items);
+
+      // Update widget state
+      syncWidgetState();
+    }
+
+    // Handle checkout button click
+    function handleCheckout() {
+      // Use widget state if available, otherwise use local cart state
+      const baseState = window.openai?.widgetState || shoppingCart;
+      const cartId = baseState.cartId;
+
+      if (!cartId || !Array.isArray(baseState.items) || baseState.items.length === 0) return;
+
+      // Call the checkout API
+      fetch('http://localhost:8000/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cartId })
+      })
+      .then(response => {
+        if (response.ok) {
+          // Clear cart on successful checkout
+          shoppingCart.cartId = cartId;
+          shoppingCart.items = [];
+          updateUI();
+          syncWidgetState();
+        }
+      })
+      .catch(error => {
+        console.error('Failed to checkout:', error);
+      });
+    }
+
+    // Generate a unique cart ID
+    function generateCartId() {
+      return crypto.randomUUID().replace(/-/g, "");
+    }
+
+    // Sync cart state to backend
+    function syncToBackend(cartId, items) {
+      console.log('Syncing to backend...', { cartId, items });
+      fetch('http://localhost:8000/sync_cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cart_id: cartId, items })
+      })
+      .then(response => {
+        if (!response.ok) {
+          console.error('Failed to sync cart:', response.statusText);
+        } else {
+          console.log('Cart synced successfully');
+        }
+      })
+      .catch(error => {
+        console.error('Failed to sync cart:', error);
+      });
+    }
+
+    // Sync to OpenAI widget state
+    function syncWidgetState() {
+      if (typeof window.openai?.setWidgetState === 'function') {
+        // Create a clean copy of the shopping cart to avoid reference issues
+        const stateToSync = {
+          cartId: shoppingCart.cartId,
+          items: shoppingCart.items.map(item => ({ ...item }))
+        };
+
+        window.openai.setWidgetState(stateToSync)
+          .catch(error => {
+            console.error('Failed to update widget state:', error);
+          });
+      }
+
+      // Update debug display
+      updateDebugDisplay();
+    }
+
+    // Update the UI based on the current cart state
+    function updateUI() {
+      const cartItemsContainer = document.getElementById('cart-items');
+      const checkoutButton = document.getElementById('checkout-btn');
+      const itemCountElement = document.getElementById('item-count');
+
+      // Update item count
+      itemCountElement.textContent = `${shoppingCart.items.length} items`;
+
+      // Clear the container
+      cartItemsContainer.innerHTML = '';
+
+      if (shoppingCart.items.length === 0) {
+        // Show empty cart message
+        const emptyCart = document.createElement('div');
+        emptyCart.className = 'empty-cart';
+        emptyCart.textContent = 'Your cart is empty. Add a few items to get started.';
+        cartItemsContainer.appendChild(emptyCart);
+        checkoutButton.disabled = true;
+      } else {
+        // Render each item
+        shoppingCart.items.forEach(item => {
+          const itemElement = createCartItemElement(item);
+          cartItemsContainer.appendChild(itemElement);
+        });
+        checkoutButton.disabled = false;
+      }
+    }
+
+    // Create a cart item element
+    function createCartItemElement(item) {
+      const template = document.getElementById('cart-item-template');
+      const clone = template.content.cloneNode(true);
+      const cartItem = clone.querySelector('.cart-item');
+
+      // Set item name and data attribute for event handlers
+      cartItem.dataset.itemName = item.name;
+      cartItem.querySelector('.item-name').textContent = item.name;
+      cartItem.querySelector('.quantity').textContent = item.quantity || 1;
+
+      // Add event listeners to the buttons
+      cartItem.querySelector('.decrease-btn').addEventListener('click', function() {
+        adjustQuantity(item.name, -1);
+      });
+      cartItem.querySelector('.increase-btn').addEventListener('click', function() {
+        adjustQuantity(item.name, 1);
+      });
+
+      // Update the icon based on item name
+      updateItemIcon(cartItem, item.name);
+
+      return cartItem;
+    }
+
+    // Update the icon for an item based on its name
+    function updateItemIcon(itemElement, name) {
+      const iconWrapper = itemElement.querySelector('.icon-wrapper');
+      const words = name.toLowerCase().replace(/[^a-z]/g, ' ').split(/\s+/).filter(Boolean);
+
+      // Check for known icons
+      for (const matcher of iconMatchers) {
+        if (matcher.keywords.some(keyword => words.includes(keyword))) {
+          // Found a matching icon
+          const svgIcon = getIconForType(matcher.icon);
+          if (svgIcon) {
+            iconWrapper.innerHTML = '';
+            iconWrapper.appendChild(svgIcon);
+          }
+          return;
+        }
+      }
+
+      // If no match, keep the default jar icon
+    }
+
+    // Get SVG icon by type
+    function getIconForType(iconType) {
+      const icons = {
+        'egg-icon': `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+          <path fill="#F3AD61" d="M16.331 2c-2.57 0-4.98 1.28-6.42 3.4l-.13.19A21.92 21.92 0 0 0 6.101 20l.08.8c.5 5.21 4.88 9.18 10.11 9.18c5.25 0 9.63-3.99 10.11-9.22l.09-.93a21.9 21.9 0 0 0-3.78-14.48A7.77 7.77 0 0 0 16.331 2" />
+        </svg>`,
+        'bread-icon': `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+          <g fill="none">
+            <path fill="#F3AD61" d="M27.34 25.593L15 30V16.5L29 13v10.238a2.5 2.5 0 0 1-1.66 2.355" />
+            <path fill="#E19747" d="M14.59 3.262L3.202 7.556L17 19l10.98-3.8A3 3 0 0 0 30 12.364v-.904a5 5 0 0 0-3.239-4.679l-9.35-3.52a4 4 0 0 0-2.821 0" />
+            <path fill="#FFDEA7" d="M3 13.5v9.955a3 3 0 0 0 1.903 2.793l9.366 3.679A2 2 0 0 0 17 28.065V19l.157-.235a5.02 5.02 0 0 0-2.415-7.487L4.702 7.513A2 2 0 0 0 2 9.386v1.403a4 4 0 0 0 .672 2.219z" />
+            <path fill="#E19747" d="M8 13.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0m-2 1a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0M7.5 17a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m-1.5.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0M9.5 16a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m2.5-1.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0m1.5 3.5a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m-1.5.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0M9.5 20a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m-1.5.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0M5.5 22a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m4.5 1.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0m1.5-.5a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1m2.5-1.5a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0m-.5 3.5a.5.5 0 1 0 0-1a.5.5 0 0 0 0 1" />
+          </g>
+        </svg>`,
+        'tomato-icon': `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+          <g fill="none">
+            <path fill="#008463" d="M15.99 5a1 1 0 0 1 1 1v4.42a1 1 0 1 1-2 0V6a1 1 0 0 1 1-1" />
+            <path fill="#F8312F" d="M19.97 9.99H12c-5.53 0-10 4.48-10 10c0 5.53 4.48 10 10 10h7.96c5.53 0 10-4.48 10-10c.01-5.52-4.47-10-9.99-10" />
+            <path fill="#00D26A" d="M15.4 12.66H9.64c-3.13 0-5.66-2.53-5.66-5.66h5.76c3.13 0 5.66 2.53 5.66 5.66M27.97 7h-5.76c-3.13 0-5.66 2.53-5.66 5.66h5.76c3.13 0 5.66-2.53 5.66-5.66" />
+            <path fill="#00F397" d="M5.75 15.07h5.77a5.65 5.65 0 0 0 4.468-2.187a5.65 5.65 0 0 0 4.472 2.187h5.76c0-3.12-2.54-5.66-5.66-5.66h-9.15c-3.13 0-5.66 2.53-5.66 5.66" />
+          </g>
+        </svg>`,
+        'avocado-icon': `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32">
+          <g fill="none">
+            <path fill="#44911B" d="M25.58 20.33c.16-1.89-.33-3.72 1.01-5.06l.83-.83a6.06 6.06 0 0 0 0-8.56l-1.86-1.86l-1.34 1.34c-1.49.04-2.97.63-4.11 1.77l-.21.2a8.02 8.02 0 0 1-4.99 2.32c-2.5.21-4.84 1.3-6.62 3.08a10.43 10.43 0 0 0-2.42 10.98l-.68.68l2.55 2.55a10.44 10.44 0 0 0 14.77 0c1.77-1.77 2.86-4.11 3.07-6.61" />
+            <path fill="#008463" d="M20.66 2c-1.84 0-3.58.72-4.88 2.02l-.18.19c-.95.95-2.22 1.54-3.57 1.66c-2.59.22-5.02 1.35-6.85 3.18A10.8 10.8 0 0 0 2 16.72c0 2.9 1.13 5.62 3.18 7.67s4.77 3.18 7.67 3.18s5.62-1.13 7.67-3.18c1.83-1.83 2.97-4.27 3.19-6.85a5.7 5.7 0 0 1 1.66-3.57l.19-.19a6.87 6.87 0 0 0 2.02-4.88c0-1.84-.72-3.58-2.02-4.88A6.93 6.93 0 0 0 20.66 2" />
+            <path fill="#C3EF3C" d="m24.32 12.93l.19-.19a5.43 5.43 0 0 0 0-7.68a5.43 5.43 0 0 0-7.68 0l-.19.19a7.18 7.18 0 0 1-4.48 2.08a9.53 9.53 0 0 0-5.94 2.76a9.367 9.367 0 0 0 0 13.25a9.367 9.367 0 0 0 13.25 0a9.53 9.53 0 0 0 2.76-5.94c.15-1.68.89-3.27 2.09-4.47" />
+            <path fill="#6D4534" d="M13.29 20.69a4.36 4.36 0 1 0 0-8.72a4.36 4.36 0 0 0 0 8.72" />
+          </g>
+        </svg>`
+      };
+
+      if (icons[iconType]) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(icons[iconType], 'image/svg+xml');
+        return doc.documentElement;
+      }
+
+      return null;
+    }
+
+    // Update debug display with current state and tool output
+    function updateDebugDisplay() {
+      const widgetStateJson = document.getElementById('widget-state-json');
+      const toolOutputJson = document.getElementById('tool-output-json');
+
+      // Format and display widget state
+      widgetStateJson.textContent = formatJson(
+        window.openai?.widgetState || shoppingCart
+      );
+
+      // Format and display tool output
+      toolOutputJson.textContent = formatJson(window.openai?.toolOutput || null);
+    }
+
+    // Format JSON for display
+    function formatJson(value) {
+      if (value === undefined || value === null) {
+        return "null";
+      }
+
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (error) {
+        return `<<unable to render: ${error}>>`;
+      }
+    }

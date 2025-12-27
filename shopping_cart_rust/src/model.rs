@@ -12,7 +12,7 @@ pub const TOOL_NAME: &str = "add_to_cart";
 /// Name of the checkout tool
 pub const CHECKOUT_TOOL_NAME: &str = "checkout";
 /// URI for the widget template
-pub const WIDGET_TEMPLATE_URI: &str = "ui://widget/shopping-cart.html";
+pub const WIDGET_TEMPLATE_URI: &str = "ui://widget/vanilla-shopping-cart.html";
 /// MIME type for the widget
 pub const WIDGET_MIME_TYPE: &str = "text/html+skybridge";
 /// Server identifier
@@ -142,17 +142,25 @@ impl AppState {
         PathBuf::from("assets") // Fallback
     }
 
-    /// Reads the shopping-cart.html file or a fallback version
+    /// Reads the widget HTML file or a fallback version
     pub async fn load_widget_html(&self) -> Result<String, axum::http::StatusCode> {
-        // First try the primary HTML file
-        let primary_html_path = self.assets_dir.join("shopping-cart.html");
-        if primary_html_path.exists() {
-            return tokio::fs::read_to_string(primary_html_path)
+        // First try the vanilla version
+        let vanilla_html_path = self.assets_dir.join("vanilla-shopping-cart.html");
+        if vanilla_html_path.exists() {
+            return tokio::fs::read_to_string(vanilla_html_path)
                 .await
                 .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR);
         }
 
-        // Search for fallbacks (e.g., shopping-cart-123.html)
+        // Then try the standard version
+        let standard_html_path = self.assets_dir.join("shopping-cart.html");
+        if standard_html_path.exists() {
+            return tokio::fs::read_to_string(standard_html_path)
+                .await
+                .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+        }
+
+        // Search for fallbacks
         let fallback_path = self.find_fallback_html_file().await?;
 
         tokio::fs::read_to_string(fallback_path)
@@ -160,7 +168,7 @@ impl AppState {
             .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)
     }
 
-    /// Finds a fallback HTML file when the primary one is not available
+    /// Finds a fallback HTML file when the primary ones are not available
     async fn find_fallback_html_file(&self) -> Result<PathBuf, axum::http::StatusCode> {
         let mut entries = tokio::fs::read_dir(&self.assets_dir)
             .await
@@ -170,16 +178,38 @@ impl AppState {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with("shopping-cart-") && name.ends_with(".html") {
+                // Look for both vanilla and standard fallbacks
+                if (name.starts_with("vanilla-shopping-cart-")
+                    || name.starts_with("shopping-cart-"))
+                    && name.ends_with(".html")
+                {
                     fallbacks.push(path);
                 }
             }
         }
 
-        // Use the lexicographically last fallback (likely the latest build)
-        fallbacks.sort();
+        // Sort the fallbacks to prioritize vanilla versions first, then by name
+        fallbacks.sort_by(|a, b| {
+            let a_name = a.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let b_name = b.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+            let a_is_vanilla = a_name.starts_with("vanilla-");
+            let b_is_vanilla = b_name.starts_with("vanilla-");
+
+            // Compare vanilla status first (vanilla comes before non-vanilla)
+            if a_is_vanilla && !b_is_vanilla {
+                return std::cmp::Ordering::Less;
+            } else if !a_is_vanilla && b_is_vanilla {
+                return std::cmp::Ordering::Greater;
+            }
+
+            // If both have same vanilla status, sort by name (latest version last)
+            b_name.cmp(a_name)
+        });
+
+        // Return the first fallback (highest priority based on our sort)
         fallbacks
-            .last()
+            .first()
             .cloned()
             .ok_or(axum::http::StatusCode::NOT_FOUND)
     }
