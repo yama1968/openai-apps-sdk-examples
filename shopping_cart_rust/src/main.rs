@@ -1,6 +1,7 @@
 //! Shopping Cart Application Main Entry Point
 //! This application demonstrates a shopping cart widget integration with OpenAI
 
+mod helpers;
 mod model;
 mod router;
 

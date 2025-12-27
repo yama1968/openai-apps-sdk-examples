@@ -1,4 +1,9 @@
+pub use crate::helpers::{
+    format_item_summary, get_or_create_cart_id, rpc_error, rpc_success, update_cart_with_new_items,
+    widget_meta,
+};
 use dashmap::DashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
@@ -189,61 +194,4 @@ impl AppState {
 // Helper Functions
 // =============================================================================
 
-/// Construct the standard metadata required by the OpenAI widget system.
-pub fn widget_meta() -> Value {
-    json!({
-        "openai/outputTemplate": WIDGET_TEMPLATE_URI,
-        "openai/toolInvocation/invoking": "Preparing shopping cart",
-        "openai/toolInvocation/invoked": "Shopping cart ready",
-        "openai/widgetAccessible": true,
-    })
-}
-
-/// Wraps a successful result in a JSON-RPC 2.0 Success Response.
-pub fn rpc_success(id: Value, result: Value) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "result": result
-    })
-}
-
-/// Wraps an error in a JSON-RPC 2.0 Error Response.
-pub fn rpc_error(id: Value, code: i32, message: impl Into<String>) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "error": {
-            "code": code,
-            "message": message.into()
-        }
-    })
-}
-
-/// Generates a new cart ID if none is provided
-pub fn get_or_create_cart_id(cart_id: Option<String>) -> String {
-    cart_id.unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string())
-}
-
-/// Updates the cart with new items, aggregating quantities for existing items
-pub fn update_cart_with_new_items(cart_items: &mut Vec<CartItem>, new_items: Vec<CartItem>) {
-    for incoming in new_items {
-        if let Some(existing) = cart_items.iter_mut().find(|i| i.name == incoming.name) {
-            // Aggregate quantities for existing items
-            existing.quantity += incoming.quantity;
-            // Note: The Python version doesn't merge extra fields, it just updates quantity
-        } else {
-            // Add new items to the cart
-            cart_items.push(incoming);
-        }
-    }
-}
-
-/// Formats items into a readable summary string
-pub fn format_item_summary(items: &[CartItem]) -> String {
-    items
-        .iter()
-        .map(|i| format!("{}x {}", i.quantity, i.name))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
+/* Helper utilities are re‑exported via `pub use helpers::{...}`; no additional code is needed here. */
