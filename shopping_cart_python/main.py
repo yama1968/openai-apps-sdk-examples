@@ -175,10 +175,16 @@ async def _handle_call_tool(req: types.CallToolRequest) -> types.ServerResult:
         )
 
     cart_id = _get_or_create_cart(payload.cart_id)
-    #   cart_items = carts[cart_id]
-    cart_items = []
+    cart_items = carts[cart_id]
+
     for item in payload.items:
-        cart_items.append(_serialize_item(item))
+        existing_item = next(
+            (i for i in cart_items if i.get("name") == item.name), None
+        )
+        if existing_item:
+            existing_item["quantity"] += item.quantity
+        else:
+            cart_items.append(_serialize_item(item))
 
     structured_content = {
         "cartId": cart_id,
