@@ -52,7 +52,7 @@ mod tests {
         });
 
         // Use the handler from the public MCP module
-        handle_tool_call(&state, TOOL_NAME, args).expect("Tool call failed");
+        handle_tool_call(&state, TOOL_NAME, args, "default-test").expect("Tool call failed");
 
         // 3. Verify
         let items = state.carts.get(cart_id).unwrap();

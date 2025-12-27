@@ -2,7 +2,7 @@
 
 use crate::cart::state::SharedState;
 use axum::{body::Body, extract::Request, middleware::Next, Router};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 /// Creates and configures the application router with all routes and middleware
 pub fn create_app_router(state: SharedState) -> Router {
@@ -16,11 +16,12 @@ pub fn create_app_router(state: SharedState) -> Router {
         res
     });
 
-    // Middleware: CORS (Permissive for local dev)
+    // Middleware: CORS (Permissive for local dev, allowing credentials)
     let cors_layer = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_origin(tower_http::cors::AllowOrigin::mirror_request())
+        .allow_credentials(true)
+        .allow_methods(tower_http::cors::AllowMethods::mirror_request())
+        .allow_headers(tower_http::cors::AllowHeaders::mirror_request());
 
     // Routes
     Router::new()

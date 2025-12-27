@@ -51,12 +51,13 @@ async fn send_rest_request(
 }
 
 /// Helper function to send a JSON-RPC request and get the response
-async fn send_jsonrpc_request(
+async fn send_jsonrpc_request_with_headers(
     app: &axum::Router,
     method: &str,
     params: Option<Value>,
     id: i32,
-) -> (StatusCode, Value) {
+    extra_headers: Vec<(&str, &str)>,
+) -> (StatusCode, axum::http::HeaderMap, Value) {
     let request_body = json!({
         "jsonrpc": "2.0",
         "method": method,
@@ -64,21 +65,40 @@ async fn send_jsonrpc_request(
         "id": id
     });
 
-    let request = Request::builder()
+    let mut builder = Request::builder()
         .method("POST")
         .uri("/mcp")
-        .header("content-type", "application/json")
+        .header("content-type", "application/json");
+
+    for (k, v) in extra_headers {
+        builder = builder.header(k, v);
+    }
+
+    let request = builder
         .body(Body::from(serde_json::to_string(&request_body).unwrap()))
         .unwrap();
 
     let response = app.clone().oneshot(request).await.unwrap();
     let status = response.status();
+    let headers = response.headers().clone();
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let body: Value = serde_json::from_slice(&body_bytes).unwrap_or(json!({}));
 
+    (status, headers, body)
+}
+
+/// Helper function to send a JSON-RPC request (default wrappers)
+async fn send_jsonrpc_request(
+    app: &axum::Router,
+    method: &str,
+    params: Option<Value>,
+    id: i32,
+) -> (StatusCode, Value) {
+    let (status, _, body) =
+        send_jsonrpc_request_with_headers(app, method, params, id, vec![]).await;
     (status, body)
 }
 
@@ -550,4 +570,61 @@ async fn test_mcp_invalid_method_type() {
     let response = app.oneshot(request).await.unwrap();
     // Rejection by Axum Json extractor or our handler
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_mcp_sticky_session_defaults() {
+    let app = create_test_app();
+
+    // 1. First call: No ID, no cookie. Should return new session ID and Set-Cookie
+    let params1 = json!({
+        "name": "add_to_cart",
+        "arguments": { "items": [{ "name": "Stick", "quantity": 1 }] }
+    });
+
+    let (status1, headers1, body1) =
+        send_jsonrpc_request_with_headers(&app, "tools/call", Some(params1), 100, vec![]).await;
+
+    assert_eq!(status1, StatusCode::OK);
+
+    // Check for Set-Cookie
+    let set_cookie = headers1.get("set-cookie").unwrap().to_str().unwrap();
+    assert!(set_cookie.contains("cart_session="));
+
+    // Extract the cookie value for next request (simple parse)
+    let cookie_val = set_cookie.split(';').next().unwrap();
+    let session_id_assigned = cookie_val.trim_start_matches("cart_session=");
+
+    // Verify the returned structure used this ID
+    let used_id = body1["result"]["structuredContent"]["cartId"]
+        .as_str()
+        .unwrap();
+    assert_eq!(used_id, session_id_assigned);
+
+    // 2. Second call: No ID, WITH cookie. Should use same ID.
+    let params2 = json!({
+        "name": "add_to_cart",
+        "arguments": { "items": [{ "name": "Stone", "quantity": 1 }] }
+    });
+
+    let (status2, _, body2) = send_jsonrpc_request_with_headers(
+        &app,
+        "tools/call",
+        Some(params2),
+        101,
+        vec![("cookie", cookie_val)],
+    )
+    .await;
+
+    assert_eq!(status2, StatusCode::OK);
+    let used_id_2 = body2["result"]["structuredContent"]["cartId"]
+        .as_str()
+        .unwrap();
+    assert_eq!(used_id_2, session_id_assigned, "Should persist session ID");
+
+    // Verify aggregation (1 stick + 1 stone)
+    let items = body2["result"]["structuredContent"]["items"]
+        .as_array()
+        .unwrap();
+    assert_eq!(items.len(), 2);
 }

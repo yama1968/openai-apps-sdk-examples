@@ -26,8 +26,13 @@ async fn handle_mcp_sse() -> impl IntoResponse {
 
 /// Endpoint: POST /mcp
 /// Handles the Model Context Protocol communication for POST requests.
+use axum::http::HeaderMap;
+
+/// Endpoint: POST /mcp
+/// Handles the Model Context Protocol communication for POST requests.
 async fn handle_mcp(
     State(state): State<SharedState>,
+    headers: HeaderMap,
     body: Result<Json<JsonRpcRequest>, axum::extract::rejection::JsonRejection>,
 ) -> impl IntoResponse {
     // Parse JSON-RPC Request (POST)
@@ -47,6 +52,9 @@ async fn handle_mcp(
     let method_name = req.method.as_str();
     let params = req.params.unwrap_or(Value::Null);
 
+    // Resolve session
+    let (session_id, is_new_session) = resolve_session_id(&headers);
+
     println!("MCP Call: {} (id: {:?})", method_name, id);
 
     // Dispatch Method
@@ -60,7 +68,8 @@ async fn handle_mcp(
             let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
             let args = params.get("arguments").cloned().unwrap_or(Value::Null);
 
-            match handle_tool_call(&state, tool_name, args) {
+            // Pass session_id as the default cart ID
+            match handle_tool_call(&state, tool_name, args, &session_id) {
                 Ok(result) => rpc_success(id, result),
                 Err(msg) => rpc_error(id, -32602, msg), // Invalid params or internal error
             }
@@ -72,7 +81,16 @@ async fn handle_mcp(
         }
     };
 
-    Json(response_body).into_response()
+    let mut response = Json(response_body).into_response();
+
+    if is_new_session {
+        let cookie_val = format!("cart_session={}; Path=/; HttpOnly", session_id);
+        response
+            .headers_mut()
+            .insert(axum::http::header::SET_COOKIE, cookie_val.parse().unwrap());
+    }
+
+    response
 }
 
 // =============================================================================
@@ -170,20 +188,29 @@ async fn handle_resources_read(state: &AppState) -> Value {
 }
 
 /// Handles `tools/call` request (Business Logic).
-pub fn handle_tool_call(state: &AppState, name: &str, args: Value) -> Result<Value, String> {
+pub fn handle_tool_call(
+    state: &AppState,
+    name: &str,
+    args: Value,
+    default_cart_id: &str,
+) -> Result<Value, String> {
     match name {
-        TOOL_NAME => handle_add_to_cart_tool(state, args),
-        CHECKOUT_TOOL_NAME => handle_checkout_tool(state, args),
+        TOOL_NAME => handle_add_to_cart_tool(state, args, default_cart_id),
+        CHECKOUT_TOOL_NAME => handle_checkout_tool(state, args, default_cart_id),
         _ => Err(format!("Unknown tool: {}", name)),
     }
 }
 
 /// Handles the add_to_cart tool functionality
-fn handle_add_to_cart_tool(state: &AppState, args: Value) -> Result<Value, String> {
+fn handle_add_to_cart_tool(
+    state: &AppState,
+    args: Value,
+    default_cart_id: &str,
+) -> Result<Value, String> {
     let input: AddToCartInput =
         serde_json::from_value(args).map_err(|e| format!("Invalid arguments: {}", e))?;
 
-    let cart_id = get_or_create_cart_id(input.cart_id);
+    let cart_id = get_or_default_cart_id(input.cart_id, default_cart_id);
 
     // Update or initialize cart
     let mut cart_items = state.carts.entry(cart_id.clone()).or_default();
@@ -205,11 +232,15 @@ fn handle_add_to_cart_tool(state: &AppState, args: Value) -> Result<Value, Strin
 }
 
 /// Handles the checkout tool functionality
-fn handle_checkout_tool(state: &AppState, args: Value) -> Result<Value, String> {
+fn handle_checkout_tool(
+    state: &AppState,
+    args: Value,
+    default_cart_id: &str,
+) -> Result<Value, String> {
     let input: CheckoutInput =
         serde_json::from_value(args).map_err(|e| format!("Invalid arguments: {}", e))?;
 
-    let cart_id = get_or_create_cart_id(input.cart_id);
+    let cart_id = get_or_default_cart_id(input.cart_id, default_cart_id);
 
     // Remove the cart from the state to clear it
     if let Some((_, items)) = state.carts.remove(&cart_id) {
