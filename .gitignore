@@ -28,11 +28,28 @@ yarn-error.log
 .idea/
 .vscode/
 
-# Python artifacts
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+.Python
 *.egg-info/
 .venv/
-
-# Ruff
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
 .ruff_cache/
+.ipynb_checkpoints/
+.pyre/
+.pytype/
+cython_debug/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Rust
+target/
+**/*.rs.bk
