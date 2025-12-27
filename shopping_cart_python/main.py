@@ -9,6 +9,8 @@ from uuid import uuid4
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 TOOL_NAME = "add_to_cart"
 WIDGET_TEMPLATE_URI = "ui://widget/shopping-cart.html"
@@ -206,6 +208,24 @@ mcp._mcp_server.request_handlers[types.CallToolRequest] = _handle_call_tool
 mcp._mcp_server.request_handlers[types.ReadResourceRequest] = _handle_read_resource
 
 app = mcp.streamable_http_app()
+
+
+async def sync_cart(request):
+    """Synchronize the backend cart state with the frontend widget state."""
+    try:
+        data = await request.json()
+        payload = AddToCartInput.model_validate(data)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    cart_id = payload.cart_id or uuid4().hex
+    # Overwrite the backend state with the frontend's definitive state
+    carts[cart_id] = [_serialize_item(item) for item in payload.items]
+    return JSONResponse({"status": "updated", "cartId": cart_id})
+
+
+app.router.routes.append(Route("/sync_cart", sync_cart, methods=["POST"]))
+
 
 try:
     from starlette.middleware.cors import CORSMiddleware

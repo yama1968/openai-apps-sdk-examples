@@ -86,7 +86,7 @@ function App() {
   const toolResponseMetadata = useOpenAiGlobal("toolResponseMetadata");
   const widgetState = useOpenAiGlobal("widgetState");
   const [cartState, setCartState] = useWidgetState<CartWidgetState>(
-    createDefaultCartState
+    createDefaultCartState,
   );
   const cartItems = Array.isArray(cartState?.items) ? cartState.items : [];
   const animationStyles = `
@@ -95,6 +95,19 @@ function App() {
       to { opacity: 1; transform: translateY(0); }
     }
   `;
+
+  const syncToBackend = async (cartId: string, items: CartItem[]) => {
+    try {
+      console.log("Syncing to backend...");
+      await fetch("http://localhost:8000/sync_cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cartId, items }),
+      });
+    } catch (error) {
+      console.error("Failed to sync cart to backend:", error);
+    }
+  };
 
   function addItem(name: string) {
     if (!name) {
@@ -118,7 +131,10 @@ function App() {
         };
       }
 
-      return { ...baseState, items };
+      const cartId = baseState.cartId ?? crypto.randomUUID().replace(/-/g, "");
+      const nextState = { ...baseState, cartId, items };
+      syncToBackend(cartId, items);
+      return nextState;
     });
   }
 
@@ -127,17 +143,14 @@ function App() {
       return;
     }
 
-    console.log("adjustQuantity", { name, delta });
     setCartState((prevState) => {
       const baseState: CartWidgetState = prevState ?? {};
       const items = Array.isArray(baseState.items)
         ? baseState.items.map((item) => ({ ...item }))
         : [];
-      console.log("adjustQuantity:prev", baseState);
 
       const idx = items.findIndex((item) => item.name === name);
       if (idx === -1) {
-        console.log("adjustQuantity:missing", name);
         return baseState;
       }
 
@@ -149,8 +162,9 @@ function App() {
         items[idx] = { ...current, quantity: nextQuantity };
       }
 
-      const nextState = { ...baseState, items };
-      console.log("adjustQuantity:next", nextState);
+      const cartId = baseState.cartId ?? crypto.randomUUID().replace(/-/g, "");
+      const nextState = { ...baseState, cartId, items };
+      syncToBackend(cartId, items);
       return nextState;
     });
   }
@@ -183,9 +197,9 @@ function App() {
 
     // Get the items that the user wants to add to the cart from toolOutput
     const incomingItems = Array.isArray(
-      (toolOutput as { items?: unknown } | null)?.items
+      (toolOutput as { items?: unknown } | null)?.items,
     )
-      ? (toolOutput as { items?: CartItem[] }).items ?? []
+      ? ((toolOutput as { items?: CartItem[] }).items ?? [])
       : [];
 
     // Since we set `widgetSessionId` on the tool response, when the tool response returns
@@ -195,7 +209,7 @@ function App() {
     const baseItems = Array.isArray(baseState.items) ? baseState.items : [];
     const incomingCartId =
       typeof (toolOutput as { cartId?: unknown } | null)?.cartId === "string"
-        ? (toolOutput as { cartId?: string }).cartId ?? undefined
+        ? ((toolOutput as { cartId?: string }).cartId ?? undefined)
         : undefined;
 
     const itemsByName = new Map<string, CartItem>();
